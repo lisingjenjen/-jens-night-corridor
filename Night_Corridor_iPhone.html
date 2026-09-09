@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Night Corridor — iPhone Horror</title>
+<style>
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#050505;color:#fff;font-family:system-ui,-apple-system,sans-serif;touch-action:none}
+#game{position:fixed;inset:0;background:radial-gradient(circle at 50% 45%,#222 0,#090909 45%,#020202 100%)}
+canvas{width:100%;height:100%;display:block}
+#hud{position:absolute;inset:0;pointer-events:none}
+#objective{position:absolute;top:18px;left:18px;font-size:14px;text-shadow:0 2px 4px #000}
+#stats{position:absolute;top:18px;right:18px;font-size:18px}
+#msg{position:absolute;left:50%;top:17%;transform:translateX(-50%);text-align:center;font-size:20px;text-shadow:0 2px 6px #000;max-width:85%}
+button{border:1px solid #aaa8;background:#111b;color:#fff;border-radius:50%;width:70px;height:70px;font-size:28px;backdrop-filter:blur(4px)}
+#stick{position:absolute;left:22px;bottom:24px;width:145px;height:145px;border:2px solid #aaa8;border-radius:50%;background:#1115}
+#knob{position:absolute;width:58px;height:58px;left:43px;top:43px;border-radius:50%;background:#ddd9}
+#look{position:absolute;right:0;top:0;width:55%;height:65%}
+#flash{position:absolute;right:22px;bottom:105px}
+#run{position:absolute;right:22px;bottom:22px}
+#restart{display:none;position:absolute;left:50%;top:60%;transform:translate(-50%,-50%);border-radius:14px;width:170px;height:54px;font-size:18px}
+@media (orientation:portrait){#msg:after{content:" Rotate your iPhone sideways for the best view.";display:block;font-size:13px;margin-top:8px}}
+</style>
+</head>
+<body>
+<div id="game"><canvas id="c"></canvas></div>
+<div id="hud">
+  <div id="objective">OBJECTIVE<br><b>Find the key and escape.</b></div>
+  <div id="stats">🔑 <span id="key">0</span>/1 &nbsp; ❤️ <span id="hp">100</span></div>
+  <div id="msg">NIGHT CORRIDOR</div>
+  <div id="stick"><div id="knob"></div></div>
+  <div id="look"></div>
+  <button id="flash">🔦</button>
+  <button id="run">🏃</button>
+  <button id="restart">PLAY AGAIN</button>
+</div>
+<script>
+const cv=document.getElementById('c'),ctx=cv.getContext('2d');
+let W,H,dpr,px=2.5,py=1.5,ang=0,hp=100,hasKey=false,dead=false,won=false,flash=true,running=false;
+let keyX=8.5,keyY=3.5,exitX=1.5,exitY=1.5;
+const walls=[
+[0,0,12,.3],[0,7.7,12,8],[0,0,.3,8],[11.7,0,12,8],
+[3,.3,3.3,5],[5.5,2.7,9,3],[8.7,3,9,7.7],[1.7,5.2,7,5.5],
+[1.7,.3,2,3.8],[9.8,.3,10.1,2.2]
+];
+const monster={x:6.8,y:6.5,active:true};
+function resize(){dpr=Math.min(devicePixelRatio||1,2);W=innerWidth;H=innerHeight;cv.width=W*dpr;cv.height=H*dpr;ctx.setTransform(dpr,0,0,dpr,0,0)}
+addEventListener('resize',resize);resize();
+function hit(x,y){for(const r of walls)if(x>r[0]&&x<r[2]&&y>r[1]&&y<r[3])return true;return false}
+function move(dx,dy){let nx=px+dx,ny=py+dy;if(!hit(nx,py))px=nx;if(!hit(px,ny))py=ny}
+let joy={x:0,y:0};
+const stick=document.getElementById('stick'),knob=document.getElementById('knob');
+function joyStart(e){e.preventDefault();joyMove(e)}
+function joyMove(e){const t=e.touches?e.touches[0]:e;const r=stick.getBoundingClientRect();let x=t.clientX-(r.left+r.width/2),y=t.clientY-(r.top+r.height/2),m=Math.min(55,Math.hypot(x,y));if(m){x=x/Math.hypot(x,y)*m;y=y/Math.hypot(x,y)*m}knob.style.transform=`translate(${x}px,${y}px)`;joy.x=x/55;joy.y=y/55}
+function joyEnd(){joy.x=joy.y=0;knob.style.transform='translate(0,0)'}
+stick.addEventListener('touchstart',joyStart,{passive:false});stick.addEventListener('touchmove',joyMove,{passive:false});stick.addEventListener('touchend',joyEnd);
+let lastX=null;
+const look=document.getElementById('look');
+look.addEventListener('touchstart',e=>{lastX=e.touches[0].clientX},{passive:true});
+look.addEventListener('touchmove',e=>{let x=e.touches[0].clientX;if(lastX!==null)ang+=(x-lastX)*.006;lastX=x},{passive:true});
+look.addEventListener('touchend',()=>lastX=null);
+document.getElementById('flash').onclick=()=>flash=!flash;
+document.getElementById('run').ontouchstart=()=>running=true;document.getElementById('run').ontouchend=()=>running=false;
+document.getElementById('restart').onclick=()=>location.reload();
+function lineBlocked(x1,y1,x2,y2){for(let i=0;i<35;i++){let t=i/35,x=x1+(x2-x1)*t,y=y1+(y2-y1)*t;if(hit(x,y))return true}return false}
+function update(dt){
+ if(dead||won)return;
+ const speed=(running?.095:.055)*dt;
+ move(Math.sin(ang)*joy.y*speed + Math.cos(ang)*joy.x*speed, Math.cos(ang)*joy.y*speed - Math.sin(ang)*joy.x*speed);
+ if(Math.hypot(px-keyX,py-keyY)<.55){hasKey=true;document.getElementById('key').textContent=1;keyX=-9}
+ if(hasKey&&Math.hypot(px-exitX,py-exitY)<.65){won=true;document.getElementById('msg').textContent='YOU ESCAPED 👁️';document.getElementById('restart').style.display='block'}
+ if(monster.active&&!lineBlocked(px,py,monster.x,monster.y)&&Math.hypot(px-monster.x,py-monster.y)<3.1){hp-=.22*dt;document.getElementById('hp').textContent=Math.max(0,Math.floor(hp));}
+ if(hp<=0){dead=true;document.getElementById('msg').textContent='THE CORRIDOR GOT YOU';document.getElementById('restart').style.display='block'}
+}
+function render(){
+ ctx.clearRect(0,0,W,H);
+ const fov=Math.PI/2.7, rays=Math.floor(W/3), rw=W/rays;
+ for(let i=0;i<rays;i++){
+  const ra=ang-fov/2+fov*(i/rays), sx=Math.cos(ra),sy=Math.sin(ra);
+  let d=0;while(d<14&&!hit(px+sx*d,py+sy*d))d+=.025;
+  let corrected=d*Math.cos(ra-ang), wallH=Math.min(H*1.8,H*1.2/(corrected+.1));
+  let shade=Math.max(12,125-corrected*9);ctx.fillStyle=`rgb(${shade},${shade},${shade})`;
+  ctx.fillRect(i*rw,(H-wallH)/2,rw+1,wallH);
+ }
+ // floor/ceiling
+ ctx.globalAlpha=.22;ctx.fillStyle='#000';ctx.fillRect(0,H/2,W,H/2);ctx.globalAlpha=1;
+ // simple key/exit indicators when nearby
+ if(Math.hypot(px-keyX,py-keyY)<4&&keyX>=0){ctx.fillStyle='#ddd';ctx.font='28px sans-serif';ctx.fillText('🔑',W/2-14,H/2-45)}
+ if(hasKey&&Math.hypot(px-exitX,py-exitY)<4){ctx.fillStyle='#f55';ctx.font='18px sans-serif';ctx.fillText('EXIT',W/2-20,H/2-45)}
+ // flashlight cone
+ if(flash){let g=ctx.createRadialGradient(W/2,H/2,30,W/2,H/2,Math.min(W,H)*.58);g.addColorStop(0,'#fff2');g.addColorStop(.5,'#fff0');g.addColorStop(1,'#000d');ctx.fillStyle=g;ctx.fillRect(0,0,W,H)}
+ // monster silhouette
+ if(monster.active){let dx=monster.x-px,dy=monster.y-py,dist=Math.hypot(dx,dy),rel=Math.atan2(dy,dx)-ang;while(rel>Math.PI)rel-=2*Math.PI;while(rel<-Math.PI)rel+=2*Math.PI;
+  if(Math.abs(rel)<fov/2&&dist<11&&!lineBlocked(px,py,monster.x,monster.y)){let sx=W/2+Math.tan(rel)/(Math.tan(fov/2))*W/2;let h=Math.min(H*1.3,H*1.0/(dist*.75));ctx.fillStyle='#050505';ctx.fillRect(sx-h*.16,H/2-h*.48,h*.32,h*.96);ctx.font=Math.max(12,h*.18)+'px sans-serif';ctx.fillText('◉  ◉',sx-h*.24,H/2-h*.28)}}
+}
+let prev=performance.now();function loop(t){let dt=Math.min(2,(t-prev)/16.67);prev=t;update(dt);render();requestAnimationFrame(loop)}requestAnimationFrame(loop);
+</script>
+</body></html>
